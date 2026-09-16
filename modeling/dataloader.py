@@ -1,3 +1,4 @@
+import argparse
 import os
 import pandas as pd
 import numpy as np
@@ -115,17 +116,17 @@ class INSPIRE(object):
         return
 
 if __name__ == "__main__":
-    
-    from model import *
-    ds = pd.read_csv("/home/luojiawei/inspire_benchmark_data/operation_.csv", header=0)
-    dataset = INSPIRE("/home/luojiawei/inspire_benchmark_data/all_op_id/",
-                      ds[ds['dataset'] == 1],
-                      id_col="op_id",
-                      param_path = "/home/luojiawei/inspire_benchmark/param_folder"
-                      )
-    
-    datas = dataset.get_1data(1900, normalize=True)
-    print("--")
-    # dataset.all_id.index(400198221)
+    parser = argparse.ArgumentParser(description="Inspect one generated INSPIRE sample")
+    parser.add_argument("--data-dir", default="data")
+    parser.add_argument("--index", type=int, default=0)
+    args = parser.parse_args()
 
+    operation_table = pd.read_csv(os.path.join(args.data_dir, "operation_.csv"), header=0)
+    dataset = INSPIRE(
+        os.path.join(args.data_dir, "all_op_id"),
+        operation_table[operation_table["dataset"] == 1],
+        id_col="op_id",
+        param_path=os.path.join(args.data_dir, "param_folder"),
+    )
+    dataset.get_1data(args.index, normalize=True)
 
