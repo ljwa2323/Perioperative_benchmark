@@ -1,84 +1,100 @@
 # Perioperative Benchmark
 
-A comprehensive machine learning framework for perioperative medicine research utilizing the INSPIRE dataset.
+Python preprocessing and modeling utilities for perioperative research with the
+INSPIRE dataset.
 
-## Overview
+## What changed
 
-This repository contains code for data preprocessing, feature engineering, and predictive modeling for perioperative medicine tasks. The project focuses on developing and evaluating machine learning models to predict various perioperative outcomes using electronic health record (EHR) data.
+The preprocessing pipeline is now implemented in Python. It replaces the former
+R scripts, removes hard-coded local paths, centralizes ICD-10 rules, and avoids
+per-operation diagnosis scans.
 
-## Repository Structure
+Diagnosis annotation uses 44 disease categories defined in
+`data_preprocessing/icd.py`.
 
-- **data_preprocessing/**: R scripts for data preparation and feature extraction
-  - `main.R`: Main script to execute the preprocessing pipeline
-  - `EMR_LIP.R`: Electronic Medical Record data processing
-  - `0_operation.R` to `5_data_generation.R`: Sequential data processing scripts
+Preoperative comorbidities follow these rules:
 
-- **modeling/**: Python modules for machine learning model implementation
-  - `model.py`: Neural network model architectures (MLP, LSTM, GRU, BiLSTM, Attention models)
-  - `dataloader.py`: Data loading utilities
-  - `utils.py`: Helper functions for model training and evaluation
-  - `utils_plot.py`: Visualization tools
+* A diagnosis normally requires `chart_time < orin_time`.
+* B16, B20, E08-E13, J40-J44, and Q20-Q24 are treated as time-independent
+  preoperative diagnoses.
+* Postoperative diagnosis flags require
+  `orin_time < chart_time < discharge_time`.
+* ICD-10-CM subcodes are matched by their three-character category. For example,
+  I21.01 matches I20-I25.
 
-- **Jupyter Notebooks**:
-  - `preoperative_tasks_modeling.ipynb`: Models for preoperative outcome prediction
-  - `intraoperative_tasks_modeling.ipynb`: Models for intraoperative outcome prediction
-  - `postoperative_tasks_modeling.ipynb`: Models for postoperative outcome prediction
-  - `metrics.ipynb`: Performance metrics calculation and analysis
-  - `data_pivoting.ipynb`: Data transformation utilities
-  - `miss_impute.ipynb`: Missing data imputation techniques
-  - `scores_performance.ipynb`: Clinical scoring systems performance evaluation
-  - `calculate_stats.ipynb`: Statistical analysis utilities
+The diagnosis timestamp conversion remains configurable. INSPIRE diagnosis time
+is divided by 60 by default, matching the unit conversion in the original code.
 
-## Key Features
+## Installation
 
-- Implementation of multiple neural network architectures including MLP, LSTM, GRU, BiLSTM with attention mechanisms
-- Comprehensive data preprocessing pipeline for perioperative data
-- Outcome prediction for various perioperative complications (stroke, AKI, ALI, etc.)
-- Clinical scoring systems integration and evaluation
-- Missing data handling strategies
+```bash
+python -m pip install -e .
+```
 
-## Requirements
+For development and tests:
 
-- R (with packages: readxl, data.table, dplyr, magrittr, lubridate, stringr, mice, parallel, pbapply, jsonlite)
-- Python 3.x
-- PyTorch
-- Pandas
-- NumPy
-- Scikit-learn
-- CUDA-capable GPU (recommended for training deep learning models)
+```bash
+python -m pip install -e '.[dev]'
+```
 
-## Usage
+## Data preprocessing
 
-1. Data Preprocessing:
-   ```
-   Rscript data_preprocessing/main.R
-   ```
+Run the complete pipeline:
 
-2. Model Training and Evaluation:
-   Execute the respective Jupyter notebooks for the perioperative phase of interest:
-   - `preoperative_tasks_modeling.ipynb`
-   - `intraoperative_tasks_modeling.ipynb`
-   - `postoperative_tasks_modeling.ipynb`
+```bash
+python -m data_preprocessing \
+  --inspire-path /path/to/inspire-1.2 \
+  --output-dir /path/to/inspire_benchmark_data \
+  --workers 8
+```
+
+Generate only operation-level files while checking the ICD and outcome logic:
+
+```bash
+python -m data_preprocessing \
+  --inspire-path /path/to/inspire-1.2 \
+  --output-dir /path/to/inspire_benchmark_data \
+  --skip-sequences
+```
+
+The pipeline writes:
+
+* `operation_derived1.csv`: all annotated operations
+* `operation_.csv`: selected cohort with subject-level train, test, and validation split
+* `operation_imputed.csv`: static model features after deterministic imputation
+* `all_op_id/<op_id>/`: per-operation time-series model inputs
+* `param_folder/`: normalization parameters calculated from the training split
+
+Existing `all_op_id` output is protected by default. Use
+`--overwrite-sequences` only when replacement is intended.
+
+## Project structure
+
+* `data_preprocessing/icd.py`: canonical ICD-10 disease rules
+* `data_preprocessing/diagnoses.py`: preoperative and postoperative annotation
+* `data_preprocessing/operations.py`: operation-level derived variables
+* `data_preprocessing/outcomes.py`: laboratory and postoperative outcomes
+* `data_preprocessing/scores.py`: SORT, Charlson, and RCRI scores
+* `data_preprocessing/emr.py`: time-series resampling, filling, masks, and encoding
+* `data_preprocessing/generation.py`: per-operation model input generation
+* `data_preprocessing/pipeline.py`: end-to-end orchestration
+* `modeling/`: PyTorch models, loading, plotting, and class-weight utilities
+* `tests/`: synthetic tests for ICD boundaries and time-window behavior
+
+All notebooks use a Python kernel.
+
+## Validation
+
+```bash
+pytest
+```
+
+The test suite checks ICD range boundaries, normalization, strict preoperative
+cutoffs, time-independent diagnoses, postoperative windows, operation features,
+and subject-level data separation.
 
 ## Data
 
-This project utilizes the INSPIRE dataset, a publicly available research dataset for perioperative medicine. Due to data privacy concerns, the raw data is not included in this repository.
-
-## Citation
-
-If you use this code for your research, please cite:
-
-```
-@article{perioperative_benchmark,
-  title={A Machine Learning Framework for Perioperative Outcome Prediction},
-  author={[Authors]},
-  journal={[Journal]},
-  year={[Year]},
-  volume={[Volume]},
-  pages={[Pages]}
-}
-```
-
-## License
-
-[Insert License Information] 
+Raw INSPIRE files are not included. Place `operations.csv`, `diagnosis.csv`,
+`labs.csv`, `vitals.csv`, and `ward_vitals.csv` in the directory passed through
+`--inspire-path`.
